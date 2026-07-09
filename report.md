@@ -1,66 +1,80 @@
-# Part B Report: LoRA SVG Logo Fine-tuning
+# Part B 报告：基于 LoRA 的 SVG 徽标生成微调
 
-## Summary
+## 摘要
 
-I fine-tuned Gemma 3 270M with LoRA on the 219 published detailed-prompt -> SVG pairs and evaluated on the 17-example validation set. The main improvement is format direction: the base model usually continues in natural language, while the fine-tuned adapter begins outputs with SVG-like markup. However, most generated SVGs are still incomplete under the fast self-evaluation decoding limit, so the absolute reward remains low.
+本项目使用 219 条公开的「详细提示词 -> SVG 徽标」训练样本，对 Gemma 3 270M 进行了 LoRA 微调，并在 17 条验证集样本上进行自评。实验的主要变化是输出格式方向上的改进：基座模型通常继续输出自然语言描述，而微调后的 adapter 更倾向于从 SVG 标记开始生成。
 
-| Model | Mean reward | Median | Min | Max |
+不过，微调模型在当前快速自评解码限制下仍然经常无法生成完整闭合的 SVG。因此，虽然相对基座模型有提升，但绝对 reward 仍然很低。
+
+| 模型 | 平均 reward | 中位数 | 最小值 | 最大值 |
 |---|---:|---:|---:|---:|
-| Base Gemma 3 270M | 1.5844 | 1.5847 | 1.0476 | 1.9125 |
-| LoRA adapter | 2.0480 | 2.1125 | 1.7875 | 2.1125 |
+| Gemma 3 270M 基座模型 | 1.5844 | 1.5847 | 1.0476 | 1.9125 |
+| LoRA 微调模型 | 2.0480 | 2.1125 | 1.7875 | 2.1125 |
 
-Mean delta: +0.4636 reward points, or +29.26% relative to the base model.
+平均分提升为 `+0.4636`，相对基座模型提升约 `+29.26%`。
 
-## Reward Design
+## Reward 设计
 
-The reward in `reward.py` is a weighted proxy for whether a generated logo is a usable SVG:
+`reward.py` 中的奖励函数是一个程序化代理指标，目标是衡量模型输出是否接近「可用的 SVG 徽标」。它不是人工视觉评价的替代品，而是训练和自评时使用的近似指标。
 
-- Validity: XML parseability, a single `<svg>...</svg>` envelope, no markdown or extra prose.
-- Structure: expected SVG tags, `viewBox`, reasonable number and diversity of vector elements.
-- Geometry: coordinates mostly inside or near the 256 x 256 canvas, no collapsed or extreme geometry.
-- Palette: at least two visible colors, moderate palette size, contrast and saturation.
-- Prompt alignment: heuristic matches between prompt color/shape words and generated SVG colors/tags.
-- Anti-degeneration: penalizes empty, tiny, overlong, repeated, or externally referenced outputs.
+reward 主要由以下部分组成：
 
-The reward deliberately gives validity the largest weight because an invalid SVG cannot be visually judged reliably. Prompt alignment is included but kept lower because keyword heuristics are much weaker than actual visual assessment.
+- 有效性：检查 XML 是否可解析，是否有完整的 `<svg>...</svg>` 外壳，是否混入 markdown 或额外自然语言。
+- 结构质量：检查是否包含合理的 SVG 标签、`viewBox`、图形元素数量和元素类型多样性。
+- 几何合理性：检查坐标是否大多位于 256 x 256 画布范围附近，是否存在极端坐标或几何塌缩。
+- 配色质量：检查是否有可见颜色，颜色数量是否适中，是否有一定明暗对比和饱和度。
+- 提示词对齐：用启发式方法匹配 prompt 中的颜色词、形状词和 SVG 中的颜色或标签。
+- 反退化：惩罚空输出、过短输出、过长输出、重复元素和外部引用等退化形式。
 
-## Training Setup
+其中，有效性权重最高，因为一个无法解析的 SVG 很难被可靠地视觉评估。提示词对齐也被纳入 reward，但权重较低，因为关键词匹配远弱于真正的视觉判断。
 
-I used the `transformers + PEFT` route rather than ms-swift. The final run used:
+## 训练设置
 
-- Base model: Gemma 3 270M, locally cached under `models/gemma-3-270m`.
-- LoRA rank: 8, alpha: 16, dropout: 0.05.
-- Target modules: q/k/v/o projections and MLP up/down/gate projections.
-- Batch size: 1.
-- Gradient accumulation: 1.
-- Epochs: 2.
-- Max sequence length: 2048.
-- Precision: bfloat16.
-- Optimizer: AdamW.
-- Learning rate: 2e-4 with cosine schedule.
+本项目采用 `transformers + PEFT` 路线进行 LoRA 微调。最终训练使用的主要配置如下：
 
-An initial fp16 run produced NaN loss, so I switched to bfloat16 after a one-step smoke test showed finite loss and gradients. The final training run was numerically healthy: validation loss decreased from 0.7248 after epoch 1 to 0.6928 after epoch 2.
+- 基座模型：Gemma 3 270M，本地缓存路径为 `models/gemma-3-270m`。
+- LoRA rank：8。
+- LoRA alpha：16。
+- LoRA dropout：0.05。
+- LoRA 目标模块：`q_proj`、`k_proj`、`v_proj`、`o_proj`、`gate_proj`、`up_proj`、`down_proj`。
+- batch size：1。
+- gradient accumulation：1。
+- 训练轮数：2 epochs。
+- 最大序列长度：2048。
+- 精度：bfloat16。
+- 优化器：AdamW。
+- 学习率：`2e-4`，cosine 调度。
 
-## Results and Interpretation
+训练过程中曾尝试 fp16，但出现了 NaN loss。之后使用一个单步 smoke test 验证 bfloat16 可以得到有限 loss 和正常梯度，因此最终训练切换到 bfloat16。最终训练过程数值正常，验证集 loss 从第 1 个 epoch 后的 `0.7248` 降到第 2 个 epoch 后的 `0.6928`。
 
-The base model mostly produced natural-language continuations instead of SVG. For example, one base output began with descriptive prose about a pencil and then repeated phrases. This explains its near-zero validity and structure scores.
+## 结果分析
 
-The LoRA model learned the broad output format. A typical adapter output begins:
+基座模型的主要问题是没有进入 SVG 输出模式。它经常继续生成自然语言描述，例如输出关于铅笔、颜色、徽章的描述性文本，并且出现重复短语。这导致它在有效性、结构、几何和配色等维度上几乎没有得分。
+
+LoRA 微调模型学到了一部分输出格式。典型的 adapter 输出会以类似下面的内容开头：
 
 ```xml
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect ...
 ```
 
-This is a real improvement over the base model, but the generated SVGs were usually truncated before `</svg>` during self-evaluation, causing XML parse errors such as "unclosed token". Therefore the adapter receives only a small reward increase even though it has learned the initial SVG format.
+这说明微调确实把模型从自然语言续写拉向了 SVG 代码生成。但问题是，大多数输出仍然在生成完整 `</svg>` 之前被截断，因此 XML 解析会报错，例如 `unclosed token`。reward 对此进行了惩罚，所以 adapter 的绝对得分仍然很低。
 
-This is a useful Goodhart-style observation: the model improved on a proxy-relevant behavior, namely starting valid SVG markup, but did not yet produce complete valid SVG documents under the chosen decoding budget. The reward correctly penalizes this because incomplete SVGs are not usable logos.
+从 Goodhart 效应角度看，这个结果也有启发意义：模型在代理指标相关的一部分行为上取得了进步，也就是更像 SVG 开头；但它还没有真正学会稳定地产生完整、可解析、视觉上可用的 SVG 徽标。reward 没有因为开头像 SVG 就给高分，而是继续惩罚不闭合和不可解析的输出，这是合理的。
 
-## Limitations
+## 局限性
 
-The result is not visually strong. The adapter does not reliably close SVG tags, and most validation outputs remain invalid XML. The absolute score is low, so I would not claim the model has learned robust SVG drawing. The most defensible claim is narrower: LoRA moved the model from natural-language continuation toward SVG-format continuation.
+本次结果不能声称模型已经学会了高质量 SVG 绘图。adapter 仍然无法稳定闭合 SVG 标签，大多数验证集输出仍是非法 XML。更准确的结论是：LoRA 微调让模型从自然语言输出转向了 SVG 格式输出，但还没有达到稳定生成有效 SVG 文档的程度。
 
-The self-evaluation decoding was capped with a per-example time limit to keep evaluation reproducible on an 8 GB local GPU. This likely suppresses the score of outputs that might eventually close after more tokens, but it also reflects a practical constraint: a useful small model should produce compact SVGs quickly.
+自评时为了保证在本地 8GB 显存机器上可运行，我给每条样本设置了生成时间限制。这可能压低了一些本可以继续生成并最终闭合的样本分数。但从实用角度看，一个可用的小模型也应该能够在较短时间内生成紧凑、闭合的 SVG，而不是依赖很长的续写。
 
-## Next Experiments
+## 后续改进方向
 
-The most promising next step would be to train with shorter target SVGs or add a reward/data preference for compact, closed SVGs. A small curated subset of simple logos may help the 270M model learn complete documents before trying more complex examples. I would also test generation with a stricter stop condition and a shorter target style, rather than simply increasing max tokens.
+下一步最有价值的实验不是简单增加训练轮数，而是降低任务难度，让模型先学会生成完整、短小、闭合的 SVG。可尝试的方向包括：
+
+- 使用更短、更简单的 SVG 目标进行微调。
+- 对训练数据进行压缩或筛选，优先保留结构简单、闭合稳定的样本。
+- 在 reward 中进一步强调完整闭合和紧凑输出。
+- 降低生成长度压力，让模型先学会少量元素的有效徽标。
+- 单独构造一批「最小可用 SVG」样本，让 270M 模型先掌握输出格式。
+
+总体来看，本次实验获得了一个小幅但可解释的相对提升。结果并不好看，但它清楚展示了小模型在该任务上的主要瓶颈：不是配色或视觉细节，而是先稳定进入 SVG 模式并生成完整可解析文档。
