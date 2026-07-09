@@ -1,0 +1,31 @@
+Use a small, cohesive palette (e.g., <path>, <circle>, <ellipse>, <rect>, <polygon>, <line>, <g>). Use a small cohesive palette (e.g., <path>, <circle>, <ellipse>, <rect>, <polygon>, <line>, <g>). No <image>, external refs, or scripts.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file without permission.
+
+License:
+This is a free license. You may not copy, distribute, sell, or modify this file

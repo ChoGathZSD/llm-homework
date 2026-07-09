@@ -1,0 +1,12 @@
+models/
+logo-detailed-prompt/
+outputs/checkpoints/
+outputs/smoke_checkpoints/
+outputs/smoke_adapter/
+outputs/smoke_generations/
+outputs/*.pid
+outputs/*.log
+*.pdf
+__pycache__/
+scripts/__pycache__/
+*.pyc
